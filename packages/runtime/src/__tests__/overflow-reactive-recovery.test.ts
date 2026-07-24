@@ -6,6 +6,7 @@ import type { LanguageModelV4StreamPart } from '@ai-sdk/provider';
 import type { LlmConnection, SessionHeader } from '@maka/core';
 import type { SessionEvent } from '@maka/core/events';
 import type { RuntimeEvent } from '@maka/core/runtime-event';
+import type { AssistantMessage, StoredMessage } from '@maka/core/session';
 import { z } from 'zod';
 import { AiSdkBackend } from '../ai-sdk-backend.js';
 import { createSessionEventMapMemory, mapSessionEventToRuntimeEvent } from '../ai-sdk-flow.js';
@@ -42,6 +43,8 @@ const OVERFLOW_MESSAGE = 'prompt is too long: 213462 tokens > 200000 maximum';
  *                 and the flush trailer keeps finishReason 'other' (the
  *                 isErrorChunk branch never reassigns it) — locks recovery
  *                 against per-family trailer drift
+ *  - 'emptyReasoningThenOverflowPart' → explicit empty reasoning followed by
+ *                 the OpenAI CHAT in-stream overflow shape
  *  - 'toolThenOverflowPart' → a tool call followed by an in-stream context
  *                 error before the request completes
  *  - 'error400' → a non-overflow, non-retryable provider failure
@@ -65,6 +68,7 @@ type CallKind =
   | 'overflow'
   | 'overflowPart'
   | 'overflowPartResponses'
+  | 'emptyReasoningThenOverflowPart'
   | 'toolThenOverflowPart'
   | 'error400'
   | 'error500'
@@ -125,6 +129,7 @@ interface ReactiveFixture {
   priorEvents: RuntimeEvent[];
   events: SessionEvent[];
   llmCalls: ReactiveLlmCall[];
+  appended: StoredMessage[];
   retryDelays: number[];
   /** JSON of each summarizer call's folded runtime events (coverage evidence). */
   summarizedSources: string[];
@@ -138,6 +143,7 @@ function buildReactiveFixture(options: ReactiveFixtureOptions): ReactiveFixture 
   const toolExecutions: string[] = [];
   const events: SessionEvent[] = [];
   const llmCalls: ReactiveLlmCall[] = [];
+  const appended: StoredMessage[] = [];
   const retryDelays: number[] = [];
   const counters = { summarizerCalls: 0 };
   const usage = (input: number, output: number) => ({
@@ -252,6 +258,7 @@ function buildReactiveFixture(options: ReactiveFixtureOptions): ReactiveFixture 
     if (
       kind === 'overflowPart' ||
       kind === 'overflowPartResponses' ||
+      kind === 'emptyReasoningThenOverflowPart' ||
       kind === 'toolThenOverflowPart'
     ) {
       // The 200 response starts streaming, then the provider sends the error
@@ -261,7 +268,9 @@ function buildReactiveFixture(options: ReactiveFixtureOptions): ReactiveFixture 
       // part with finishReason 'error'; Responses forwards the WHOLE error
       // chunk and its flush keeps the initial finishReason 'other'.
       const errorValue =
-        kind === 'overflowPart' || kind === 'toolThenOverflowPart'
+        kind === 'overflowPart' ||
+        kind === 'emptyReasoningThenOverflowPart' ||
+        kind === 'toolThenOverflowPart'
           ? {
               message: 'Bad Request',
               type: 'invalid_request_error',
@@ -279,12 +288,18 @@ function buildReactiveFixture(options: ReactiveFixtureOptions): ReactiveFixture 
               },
             };
       const trailerReason =
-        kind === 'overflowPart'
+        kind === 'overflowPart' || kind === 'emptyReasoningThenOverflowPart'
           ? { unified: 'error' as const, raw: undefined }
           : { unified: 'other' as const, raw: undefined };
       return simulateReadableStream({
         chunks: [
           { type: 'stream-start', warnings: [] },
+          ...(kind === 'emptyReasoningThenOverflowPart'
+            ? ([
+                { type: 'reasoning-start', id: `failed-reasoning-${call}` },
+                { type: 'reasoning-delta', id: `failed-reasoning-${call}`, delta: '' },
+              ] satisfies LanguageModelV4StreamPart[])
+            : []),
           ...(kind === 'toolThenOverflowPart'
             ? ([
                 {
@@ -394,7 +409,8 @@ function buildReactiveFixture(options: ReactiveFixtureOptions): ReactiveFixture 
   const backend = new AiSdkBackend({
     sessionId: 'session-1',
     header: header(),
-    appendMessage: async () => {
+    appendMessage: async (message) => {
+      appended.push(message);
       if (!options.slowAppendMessage) return;
       for (let i = 0; i < 5; i += 1) await flushMacrotask();
     },
@@ -475,6 +491,7 @@ function buildReactiveFixture(options: ReactiveFixtureOptions): ReactiveFixture 
     priorEvents,
     events,
     llmCalls,
+    appended,
     retryDelays,
     summarizedSources,
     persist,
@@ -875,6 +892,24 @@ describe('reactive overflow recovery in the streaming backend', () => {
     );
     assert.equal(fixture.recorded.length, 1);
     assert.equal(fixture.recorded[0]!.phase, 'mid_turn');
+  });
+
+  test('does not persist empty reasoning from an overflow attempt after recovery', async () => {
+    const fixture = buildReactiveFixture({
+      script: ['tool', 'emptyReasoningThenOverflowPart', 'done'],
+      bigPriors: true,
+    });
+    await runTurn(fixture);
+
+    assert.equal(fixture.model.doStreamCalls.length, 3);
+    assert.equal(complete(fixture)?.stopReason, 'end_turn');
+    const assistants = fixture.appended.filter(
+      (message): message is AssistantMessage => message.type === 'assistant',
+    );
+    assert.deepEqual(
+      assistants.map(({ text, thinking }) => ({ text, thinking })),
+      [{ text: 'done', thinking: undefined }],
+    );
   });
 
   test('recovers from the Responses-family in-stream error shape with its non-error finish trailer (review round-9 P3)', async () => {

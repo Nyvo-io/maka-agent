@@ -111,9 +111,9 @@ export function backfillRuntimeEventsFromStoredMessages(
           author: 'agent',
           content: { kind: 'text', text: message.text },
           actions: { stateDelta: recoveryState(now, message) },
-          refs: { storedMessageId: message.id },
+          refs: { storedMessageId: message.id, providerEventId: message.id },
         });
-        if (message.thinking && message.thinking.text.length > 0) {
+        if (message.thinking) {
           events.push({
             ...base,
             id: newId(),
@@ -125,9 +125,12 @@ export function backfillRuntimeEventsFromStoredMessages(
               ...(message.thinking.signature !== undefined
                 ? { signature: message.thinking.signature }
                 : {}),
+              ...(message.thinking.providerOptions !== undefined
+                ? { providerOptions: structuredClone(message.thinking.providerOptions) }
+                : {}),
             },
             actions: { stateDelta: recoveryState(now, message) },
-            refs: { storedMessageId: message.id },
+            refs: { storedMessageId: message.id, providerEventId: message.id },
           });
         }
         break;
