@@ -20,6 +20,7 @@ import {
   isBudgetExhaustedTrialException,
   mergeAgentEnv,
   modelIdForProvider,
+  providerProxyApiProtocol,
   providerProxyAuthMode,
   providerProxyUpstreamBaseUrl,
   providerProxyUsageProtocol,
@@ -715,7 +716,7 @@ async function pierProviderRuntime(
   // a Squid-legal port, defaulting to host.docker.internal unless an explicit
   // advertised host is supplied (the native-Linux escape hatch, e.g. 172.17.0.1).
   const advertisedHost = agent === 'maka' ? '127.0.0.1' : options.providerProxyAdvertisedHost;
-  const apiProtocol = agent === 'maka' ? options.agentEnv?.MAKA_MODEL_API_PROTOCOL : undefined;
+  const apiProtocol = providerProxyApiProtocol(agent, options.agentEnv);
   const proxy = await startProviderAuthProxy({
     upstreamBaseUrl: providerProxyUpstreamBaseUrl(baseUrl, provider, apiProtocol),
     ...(advertisedHost !== undefined ? { advertisedHost } : {}),

@@ -1148,7 +1148,7 @@ async function hostSideProviderRuntime(options: HarborTaskRunnerOptions): Promis
     const resolveProviderCredential = options.resolveProviderCredential;
     if (!apiKeyFile && !resolveProviderCredential) return null;
     if (!baseUrl) throw new Error(`${agent} provider ${provider} requires a base URL`);
-    const apiProtocol = agent === 'maka' ? options.agentEnv?.MAKA_MODEL_API_PROTOCOL : undefined;
+    const apiProtocol = providerProxyApiProtocol(agent, options.agentEnv);
     const proxy = await startProviderAuthProxy({
       upstreamBaseUrl: providerProxyUpstreamBaseUrl(baseUrl, provider, apiProtocol),
       ...(agent === 'maka' ? { advertisedHost: '127.0.0.1' } : {}),
@@ -1218,6 +1218,15 @@ export function providerTokenSummary(
     costUsd,
     pricingSource: 'runtime',
   };
+}
+
+/** Match the Maka host connection's protocol authority when configuring its auth proxy. */
+export function providerProxyApiProtocol(
+  agent: HarborTaskRunnerOptions['agent'],
+  agentEnv: Record<string, string> | undefined,
+): string | undefined {
+  if (agent !== 'maka') return undefined;
+  return agentEnv?.MAKA_HOST_MODEL_API_PROTOCOL || agentEnv?.MAKA_MODEL_API_PROTOCOL || undefined;
 }
 
 /** OpenAI-compatible Kimi runtimes add /v1 to the advertised proxy base. */

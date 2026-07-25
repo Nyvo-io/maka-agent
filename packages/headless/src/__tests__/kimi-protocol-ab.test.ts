@@ -139,6 +139,42 @@ describe('Kimi protocol A/B', () => {
     assert.match(result.smokeTrace.error ?? '', /runId expected run-task-a, observed run-1/);
   });
 
+  test('accepts and measures every request from a continuation trace', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'maka-kimi-protocol-ab-continuation-'));
+    const systemPromptPath = join(dir, 'system-prompt.md');
+    await writeFile(systemPromptPath, 'fixed prompt\n', 'utf8');
+    let runnerCalls = 0;
+
+    const result = await runKimiProtocolAbComparison({
+      runId: 'run-kimi-protocol',
+      config: config(),
+      systemPromptPath,
+      resultsJsonlPath: join(dir, 'results.jsonl'),
+      evaluationTasks: [{ id: 'task-a', path: '/bench/task-a' }],
+      reps: 1,
+      billingMode: 'account-plan',
+      taskRunner: async (input) => {
+        runnerCalls += 1;
+        const traceEventsPath = join(dir, `trace-${runnerCalls}.jsonl`);
+        const runtimeRefs = await writeContinuationTrace(
+          traceEventsPath,
+          input.agentEnv?.MAKA_MODEL_API_PROTOCOL,
+          input.task.id,
+        );
+        const terminal = output(input.task.id, traceEventsPath);
+        terminal.cell.runtimeRefs = { invocationId: `inv-${input.task.id}-2`, ...runtimeRefs };
+        return terminal;
+      },
+      now: monotonicClock(),
+      newId: idGenerator(),
+    });
+
+    assert.equal(result.summary.decision, 'diagnostic', JSON.stringify(result, null, 2));
+    assert.equal(result.evidence.length, 2);
+    assert.equal(result.requestMetrics.anthropic.requests, 2);
+    assert.equal(result.requestMetrics.openai.requests, 2);
+  });
+
   test('fails closed when a torn request attempt appears beside valid telemetry', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'maka-kimi-protocol-ab-torn-trace-'));
     const systemPromptPath = join(dir, 'system-prompt.md');
@@ -534,6 +570,61 @@ async function writeTrace(
     },
   ];
   await writeFile(path, `${events.map((event) => JSON.stringify(event)).join('\n')}\n`, 'utf8');
+}
+
+async function writeContinuationTrace(
+  path: string,
+  protocol: string | undefined,
+  taskId: string,
+): Promise<ProviderRequestTraceIdentity> {
+  const provider = protocol === 'openai-chat' ? 'openai' : 'anthropic';
+  const sessionId = `session-${taskId}`;
+  const rows: Record<string, unknown>[] = [];
+  let finalIdentity: ProviderRequestTraceIdentity | undefined;
+  for (const turn of [1, 2]) {
+    const identity = {
+      runId: `run-${taskId}-${turn}`,
+      sessionId,
+      turnId: `turn-${taskId}-${turn}`,
+    };
+    finalIdentity = identity;
+    const value = trace(provider, `sha256:message-${turn}`, identity);
+    const traceId = `trace-${provider}-${turn}`;
+    const captureId = `capture-${provider}-${turn}`;
+    const artifactId = `artifact-${provider}-${turn}`;
+    const attemptId = `attempt-${provider}-${turn}`;
+    const capture = {
+      ...value.captures[0]!,
+      traceId,
+      captureId,
+      artifactId,
+    };
+    const attempt = {
+      ...value.attempts[0]!,
+      traceId,
+      attemptId,
+      captureId,
+      captureArtifactId: artifactId,
+    };
+    rows.push(
+      {
+        type: 'provider_request_captured',
+        id: captureId,
+        ...identity,
+        ts: turn * 10,
+        data: capture,
+      },
+      {
+        type: 'provider_request_attempt_recorded',
+        id: attemptId,
+        ...identity,
+        ts: turn * 10 + 2,
+        data: attempt,
+      },
+    );
+  }
+  await writeFile(path, `${rows.map((event) => JSON.stringify(event)).join('\n')}\n`, 'utf8');
+  return finalIdentity!;
 }
 
 function trace(

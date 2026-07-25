@@ -855,7 +855,7 @@ describe('createHarborTaskRunner', () => {
     });
   });
 
-  test('uses the selected OpenAI protocol for the default Maka Kimi Coding Plan proxy', async () => {
+  test('uses the host-selected OpenAI protocol for the default Maka Kimi Coding Plan proxy', async () => {
     await withRun(async ({ jobsDir, repo }) => {
       let upstreamAuthorization = '';
       let upstreamPath = '';
@@ -891,7 +891,7 @@ describe('createHarborTaskRunner', () => {
           },
           agentEnv: {
             MAKA_BASE_URL: `http://127.0.0.1:${address.port}/coding/v1`,
-            MAKA_MODEL_API_PROTOCOL: 'openai-chat',
+            MAKA_HOST_MODEL_API_PROTOCOL: 'openai-chat',
           },
           runHarbor: async (request) => {
             const proxyUrl = request.env?.MAKA_HOST_BASE_URL;
