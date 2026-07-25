@@ -1107,14 +1107,10 @@ async function hostSideProviderRuntime(options: HarborTaskRunnerOptions): Promis
   telemetry?: () => ProviderRequestTelemetry[];
   close?: () => Promise<void>;
 } | null> {
+  const agent = options.agent ?? 'maka';
   const provider = options.provider ?? 'deepseek';
-  if (usesHostProviderProxy(options.agent) && provider === 'github-copilot') {
-    const adapter =
-      options.agent === 'kimi-code'
-        ? 'Kimi Code'
-        : options.agent === 'codex'
-          ? 'Codex'
-          : 'OpenCode';
+  if (usesHostProviderProxy(agent) && provider === 'github-copilot') {
+    const adapter = agent === 'kimi-code' ? 'Kimi Code' : agent === 'codex' ? 'Codex' : 'OpenCode';
     throw new Error(
       `GitHub Copilot Harbor runs use the Maka host agent; the ${adapter} Harbor adapter does not support this provider`,
     );
@@ -1147,26 +1143,24 @@ async function hostSideProviderRuntime(options: HarborTaskRunnerOptions): Promis
       )
     : undefined;
   const baseUrl = copilotCredential?.baseUrl ?? configuredBaseUrl;
-  if (options.resolveProviderCredential || usesHostProviderProxy(options.agent)) {
+  if (options.resolveProviderCredential || usesHostProviderProxy(agent)) {
     const apiKeyFile = options.apiKeyFile;
     const resolveProviderCredential = options.resolveProviderCredential;
     if (!apiKeyFile && !resolveProviderCredential) return null;
-    if (!baseUrl) throw new Error(`${options.agent} provider ${provider} requires a base URL`);
-    const apiProtocol =
-      options.agent === 'maka' ? options.agentEnv?.MAKA_MODEL_API_PROTOCOL : undefined;
+    if (!baseUrl) throw new Error(`${agent} provider ${provider} requires a base URL`);
+    const apiProtocol = agent === 'maka' ? options.agentEnv?.MAKA_MODEL_API_PROTOCOL : undefined;
     const proxy = await startProviderAuthProxy({
       upstreamBaseUrl: providerProxyUpstreamBaseUrl(baseUrl, provider, apiProtocol),
-      ...(options.agent === 'maka' ? { advertisedHost: '127.0.0.1' } : {}),
+      ...(agent === 'maka' ? { advertisedHost: '127.0.0.1' } : {}),
       ...(resolveProviderCredential
         ? { resolveUpstreamCredential: resolveProviderCredential }
         : { apiKeyFile: apiKeyFile! }),
-      authMode:
-        options.agent === 'kimi-code' ? 'bearer' : providerProxyAuthMode(provider, apiProtocol),
-      usageProtocol: providerProxyUsageProtocol(options.agent, provider, apiProtocol),
+      authMode: agent === 'kimi-code' ? 'bearer' : providerProxyAuthMode(provider, apiProtocol),
+      usageProtocol: providerProxyUsageProtocol(agent, provider, apiProtocol),
     });
     return {
       env:
-        options.agent === 'maka'
+        agent === 'maka'
           ? {
               MAKA_HOST_BASE_URL: proxy.baseUrl,
               MAKA_HOST_API_KEY: proxy.token,

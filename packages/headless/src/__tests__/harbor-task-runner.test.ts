@@ -855,7 +855,7 @@ describe('createHarborTaskRunner', () => {
     });
   });
 
-  test('uses the selected OpenAI protocol for the Maka Kimi Coding Plan proxy', async () => {
+  test('uses the selected OpenAI protocol for the default Maka Kimi Coding Plan proxy', async () => {
     await withRun(async ({ jobsDir, repo }) => {
       let upstreamAuthorization = '';
       let upstreamPath = '';
@@ -879,7 +879,6 @@ describe('createHarborTaskRunner', () => {
         const runner = createHarborTaskRunner({
           makaRepoPath: repo,
           jobsDir,
-          agent: 'maka',
           model: 'kimi-coding-plan/k3',
           provider: 'kimi-coding-plan',
           reasoningEffort: 'max',
