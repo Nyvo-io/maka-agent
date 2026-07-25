@@ -202,6 +202,170 @@ describe('prepared provider request capture', () => {
     );
   });
 
+  test('normalizes Anthropic thinking budget into the protocol-independent output limit', () => {
+    const capture = (providerOptions: Record<string, unknown>, maxOutputTokens: number) =>
+      requestShape.capturePreparedProviderRequest({
+        providerId: 'kimi-coding-plan',
+        modelId: 'kimi-for-coding',
+        instructions: 'system',
+        messages: [{ role: 'user', content: 'hello' }],
+        tools: [],
+        providerOptions,
+        requestPayload: {
+          prompt: [{ role: 'user', content: 'hello' }],
+          maxOutputTokens,
+          providerOptions,
+        },
+      });
+
+    const anthropic = capture(
+      { anthropic: { thinking: { type: 'enabled', budgetTokens: 1_024 } } },
+      31_744,
+    );
+    const openai = capture({ maka: { kimiReasoningField: 'reasoning_content' } }, 32_768);
+
+    assert.equal(
+      anthropic.requestPayloadWithoutProviderOptionsHash,
+      openai.requestPayloadWithoutProviderOptionsHash,
+    );
+    assert.notEqual(anthropic.requestHash, openai.requestHash);
+  });
+
+  test('excludes provider metadata nested in prompt messages and parts', () => {
+    const capture = (prompt: unknown[], tools: unknown[] = []) =>
+      requestShape.capturePreparedProviderRequest({
+        providerId: 'provider',
+        modelId: 'model',
+        messages: prompt,
+        tools,
+        requestPayload: { prompt, tools },
+      });
+    const sharedPrompt = [
+      {
+        role: 'assistant',
+        content: [{ type: 'reasoning', text: 'analysis' }],
+      },
+    ];
+    const anthropicPrompt = [
+      {
+        role: 'assistant',
+        providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+        content: [
+          {
+            type: 'reasoning',
+            text: 'analysis',
+            providerOptions: { anthropic: { signature: 'signed-reasoning' } },
+          },
+        ],
+      },
+    ];
+
+    assert.equal(
+      capture(anthropicPrompt).requestPayloadWithoutProviderOptionsHash,
+      capture(sharedPrompt).requestPayloadWithoutProviderOptionsHash,
+    );
+
+    const sharedToolPrompt = [
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-1',
+            toolName: 'Inspect',
+            output: { type: 'content', value: [{ type: 'text', text: 'done' }] },
+          },
+        ],
+      },
+    ];
+    const providerToolPrompt = [
+      {
+        ...sharedToolPrompt[0],
+        providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+        content: [
+          {
+            ...sharedToolPrompt[0]!.content[0],
+            providerOptions: { anthropic: { toolUseId: 'provider-call-1' } },
+            output: {
+              type: 'content',
+              providerOptions: { anthropic: { resultId: 'provider-result-1' } },
+              value: [
+                {
+                  type: 'text',
+                  text: 'done',
+                  providerOptions: { anthropic: { blockId: 'provider-block-1' } },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ];
+    const sharedTools = [{ type: 'function', name: 'Inspect', inputSchema: { type: 'object' } }];
+    const providerTools = [
+      {
+        ...sharedTools[0],
+        providerOptions: { anthropic: { deferLoading: true } },
+      },
+    ];
+
+    assert.equal(
+      capture(providerToolPrompt, providerTools).requestPayloadWithoutProviderOptionsHash,
+      capture(sharedToolPrompt, sharedTools).requestPayloadWithoutProviderOptionsHash,
+    );
+  });
+
+  test('preserves same-named fields inside user data and tool schemas', () => {
+    const hash = (prompt: unknown[], tools: unknown[] = []) =>
+      requestShape.capturePreparedProviderRequest({
+        providerId: 'provider',
+        modelId: 'model',
+        messages: prompt,
+        tools,
+        requestPayload: { prompt, tools },
+      }).requestPayloadWithoutProviderOptionsHash;
+    const toolCall = (value: string) => [
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-1',
+            toolName: 'Inspect',
+            input: { providerOptions: value },
+          },
+        ],
+      },
+    ];
+    const toolResult = (value: string) => [
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-1',
+            toolName: 'Inspect',
+            output: { type: 'json', value: { providerOptions: value } },
+          },
+        ],
+      },
+    ];
+    const tool = (description: string) => [
+      {
+        type: 'function',
+        name: 'Inspect',
+        inputSchema: {
+          type: 'object',
+          properties: { providerOptions: { type: 'string', description } },
+        },
+      },
+    ];
+
+    assert.notEqual(hash(toolCall('alpha')), hash(toolCall('bravo')));
+    assert.notEqual(hash(toolResult('alpha')), hash(toolResult('bravo')));
+    assert.notEqual(hash([], tool('alpha')), hash([], tool('bravo')));
+  });
+
   test('finds the first changed cacheable segment by exact content hash', () => {
     const capture = requestShape.capturePreparedProviderRequest;
     const findFirstChanged = Reflect.get(requestShape, 'findFirstChangedCacheableSegment') as
