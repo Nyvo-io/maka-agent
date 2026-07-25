@@ -76,8 +76,10 @@ export interface PreparedProviderRequestInput {
 }
 
 export interface PreparedProviderRequestCapture {
-  schemaVersion: 1;
+  schemaVersion: 2;
   requestHash: string;
+  /** Hash of the exact model-call payload after removing protocol-owned options. */
+  requestPayloadWithoutProviderOptionsHash: string;
   requestBytes: number;
   serializedRequest: string;
   segments: PreparedRequestSegment[];
@@ -217,16 +219,23 @@ export function capturePreparedProviderRequest(
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     requestHash: stableHash({
       providerId: input.providerId,
       modelId: input.modelId,
       payload,
     }),
+    requestPayloadWithoutProviderOptionsHash: stableHash(withoutTopLevelProviderOptions(payload)),
     requestBytes: Buffer.byteLength(serializedRequest, 'utf8'),
     serializedRequest,
     segments,
   };
+}
+
+function withoutTopLevelProviderOptions(payload: unknown): unknown {
+  if (!isObjectLike(payload)) return payload;
+  const { providerOptions: _providerOptions, ...shared } = payload;
+  return shared;
 }
 
 export function findFirstChangedCacheableSegment(

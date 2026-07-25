@@ -170,6 +170,38 @@ describe('prepared provider request capture', () => {
     assert.ok(result.segments.every((segment) => /^sha256:[a-f0-9]{64}$/.test(segment.hash)));
   });
 
+  test('versions and hashes non-provider-options request parameters for comparison', () => {
+    const capture = (providerOptions: Record<string, unknown>, maxOutputTokens?: number) =>
+      requestShape.capturePreparedProviderRequest({
+        providerId: 'provider',
+        modelId: 'k3',
+        instructions: 'system',
+        messages: [{ role: 'user', content: 'hello' }],
+        tools: [{ name: 'Read', inputSchema: { type: 'object' } }],
+        providerOptions,
+        requestPayload: {
+          prompt: [{ role: 'user', content: 'hello' }],
+          tools: [{ name: 'Read', inputSchema: { type: 'object' } }],
+          providerOptions,
+          ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+        },
+      });
+
+    const anthropic = capture({ anthropic: { effort: 'max' } }, 131_072);
+    const openai = capture({ kimiCodingPlan: { reasoningEffort: 'max' } }, 131_072);
+    const changedSharedParameter = capture({ kimiCodingPlan: { reasoningEffort: 'max' } }, 32_768);
+
+    assert.equal(anthropic.schemaVersion, 2);
+    assert.equal(
+      anthropic.requestPayloadWithoutProviderOptionsHash,
+      openai.requestPayloadWithoutProviderOptionsHash,
+    );
+    assert.notEqual(
+      anthropic.requestPayloadWithoutProviderOptionsHash,
+      changedSharedParameter.requestPayloadWithoutProviderOptionsHash,
+    );
+  });
+
   test('finds the first changed cacheable segment by exact content hash', () => {
     const capture = requestShape.capturePreparedProviderRequest;
     const findFirstChanged = Reflect.get(requestShape, 'findFirstChangedCacheableSegment') as

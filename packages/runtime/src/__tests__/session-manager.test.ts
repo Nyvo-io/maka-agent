@@ -14431,7 +14431,7 @@ class ProviderRequestTraceBackend implements AgentBackend {
 
   async *send(input: BackendSendInput): AsyncIterable<SessionEvent> {
     await this.ctx.recordProviderRequestCapture?.({
-      schemaVersion: 1,
+      schemaVersion: 2,
       traceId: 'provider-trace-1',
       captureId: 'capture-1',
       turnId: input.turnId,
@@ -14439,6 +14439,7 @@ class ProviderRequestTraceBackend implements AgentBackend {
       providerId: 'fake',
       modelId: 'fake-model',
       requestHash: 'sha256:request',
+      requestPayloadWithoutProviderOptionsHash: 'sha256:shared-request',
       requestBytes: 100,
       segments: [],
       artifactId: 'artifact-capture',
@@ -14495,7 +14496,7 @@ class ProviderCaptureGateBackend implements AgentBackend {
 
   async *send(input: BackendSendInput): AsyncIterable<SessionEvent> {
     await this.ctx.recordProviderRequestCapture?.({
-      schemaVersion: 1,
+      schemaVersion: 2,
       traceId: 'provider-trace-gated',
       captureId: 'capture-gated',
       turnId: input.turnId,
@@ -14503,6 +14504,7 @@ class ProviderCaptureGateBackend implements AgentBackend {
       providerId: 'fake',
       modelId: 'fake-model',
       requestHash: 'sha256:gated',
+      requestPayloadWithoutProviderOptionsHash: 'sha256:shared-gated',
       requestBytes: 100,
       segments: [],
       artifactId: 'artifact-gated',
@@ -14556,7 +14558,7 @@ class ProviderCaptureAfterAttemptFailureBackend implements AgentBackend {
     await this.attemptFailureRecorded;
     try {
       await this.ctx.recordProviderRequestCapture?.({
-        schemaVersion: 1,
+        schemaVersion: 2,
         traceId: 'provider-trace-1',
         captureId: 'capture-2',
         turnId: input.turnId,
@@ -14564,6 +14566,7 @@ class ProviderCaptureAfterAttemptFailureBackend implements AgentBackend {
         providerId: 'fake',
         modelId: 'fake-model',
         requestHash: 'sha256:request-2',
+        requestPayloadWithoutProviderOptionsHash: 'sha256:shared-request-2',
         requestBytes: 120,
         segments: [],
         artifactId: 'artifact-capture-2',
