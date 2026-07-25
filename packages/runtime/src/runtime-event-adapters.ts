@@ -127,7 +127,7 @@ export function storedMessageToRuntimeEvent(
         role: 'model',
         author: 'agent',
         content: { kind: 'text', text: message.text },
-        refs: { storedMessageId: message.id },
+        refs: { storedMessageId: message.id, providerEventId: message.id },
       };
 
     case 'system_note':
@@ -189,7 +189,7 @@ export function storedMessageToRuntimeEvents(
           ? { providerOptions: structuredClone(message.thinking.providerOptions) }
           : {}),
       },
-      refs: { storedMessageId: message.id },
+      refs: { storedMessageId: message.id, providerEventId: message.id },
     });
   }
 

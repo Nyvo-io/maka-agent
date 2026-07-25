@@ -336,6 +336,11 @@ describe('storedMessageToRuntimeEvents', () => {
       text: '',
       providerOptions: { maka: { kimiReasoningField: 'reasoning' } },
     });
+    expect(
+      buildRuntimeEventModelReplayPlan(out).items.map((item) =>
+        'stepId' in item ? item.stepId : undefined,
+      ),
+    ).toEqual(['a3', 'a3']);
   });
 });
 
