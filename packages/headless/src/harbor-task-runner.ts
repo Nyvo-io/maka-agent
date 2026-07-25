@@ -1158,8 +1158,15 @@ async function hostSideProviderRuntime(options: HarborTaskRunnerOptions): Promis
       ...(resolveProviderCredential
         ? { resolveUpstreamCredential: resolveProviderCredential }
         : { apiKeyFile: apiKeyFile! }),
-      authMode: options.agent === 'kimi-code' ? 'bearer' : providerProxyAuthMode(provider),
-      usageProtocol: providerProxyUsageProtocol(options.agent, provider),
+      authMode:
+        options.agent === 'kimi-code'
+          ? 'bearer'
+          : providerProxyAuthMode(provider, options.agentEnv?.MAKA_MODEL_API_PROTOCOL),
+      usageProtocol: providerProxyUsageProtocol(
+        options.agent,
+        provider,
+        options.agentEnv?.MAKA_MODEL_API_PROTOCOL,
+      ),
     });
     return {
       env:
@@ -1223,8 +1230,13 @@ export function providerTokenSummary(
   };
 }
 
-/** Shared across runners: provider registry drives the proxy's client-facing auth header. */
-export function providerProxyAuthMode(provider: string): 'bearer' | 'x-api-key' {
+/** Shared across runners: the selected Kimi protocol overrides its Anthropic registry default. */
+export function providerProxyAuthMode(
+  provider: string,
+  apiProtocol?: string,
+): 'bearer' | 'x-api-key' {
+  if (provider === 'kimi-coding-plan' && apiProtocol === 'openai-chat') return 'bearer';
+  if (provider === 'kimi-coding-plan' && apiProtocol === 'anthropic-messages') return 'x-api-key';
   const definition = (
     PROVIDER_DEFAULTS as Partial<Record<string, (typeof PROVIDER_DEFAULTS)[ProviderType]>>
   )[provider];
@@ -1238,8 +1250,12 @@ export function providerProxyAuthMode(provider: string): 'bearer' | 'x-api-key' 
 export function providerProxyUsageProtocol(
   agent: HarborTaskRunnerOptions['agent'],
   provider: string,
+  apiProtocol?: string,
 ): ProviderUsageProtocol | undefined {
   if (agent === 'kimi-code') return 'openai-chat-sse';
+  if (provider === 'kimi-coding-plan' && apiProtocol === 'openai-chat') return 'openai-chat-sse';
+  if (provider === 'kimi-coding-plan' && apiProtocol === 'anthropic-messages')
+    return 'anthropic-sse';
   const definition = (
     PROVIDER_DEFAULTS as Partial<Record<string, (typeof PROVIDER_DEFAULTS)[ProviderType]>>
   )[provider];

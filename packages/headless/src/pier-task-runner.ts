@@ -261,7 +261,10 @@ export function createPierTaskRunner(options: PierTaskRunnerOptions): TaskRunner
     const launchAttempt = async (): Promise<PierRunResult> => {
       // Proxy bind errors surface raw, before the launch try, with their own
       // message — they are configuration faults, not infra flakes.
-      const providerRuntime = await pierProviderRuntime(options, agent);
+      const providerRuntime = await pierProviderRuntime(
+        { ...options, agentEnv: attemptAgentEnv },
+        agent,
+      );
       const envFileEntries = providerRuntime?.envFile ?? {};
       const usesEnvFile = Object.keys(envFileEntries).length > 0;
       try {
@@ -718,8 +721,15 @@ async function pierProviderRuntime(
     ...(options.resolveProviderCredential
       ? { resolveUpstreamCredential: options.resolveProviderCredential }
       : { apiKeyFile: options.apiKeyFile! }),
-    authMode: agent === 'kimi-code' ? 'bearer' : providerProxyAuthMode(provider),
-    usageProtocol: providerProxyUsageProtocol(agent, provider),
+    authMode:
+      agent === 'kimi-code'
+        ? 'bearer'
+        : providerProxyAuthMode(provider, options.agentEnv?.MAKA_MODEL_API_PROTOCOL),
+    usageProtocol: providerProxyUsageProtocol(
+      agent,
+      provider,
+      options.agentEnv?.MAKA_MODEL_API_PROTOCOL,
+    ),
   });
 
   return {
