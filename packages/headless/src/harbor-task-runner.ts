@@ -1152,21 +1152,17 @@ async function hostSideProviderRuntime(options: HarborTaskRunnerOptions): Promis
     const resolveProviderCredential = options.resolveProviderCredential;
     if (!apiKeyFile && !resolveProviderCredential) return null;
     if (!baseUrl) throw new Error(`${options.agent} provider ${provider} requires a base URL`);
+    const apiProtocol =
+      options.agent === 'maka' ? options.agentEnv?.MAKA_MODEL_API_PROTOCOL : undefined;
     const proxy = await startProviderAuthProxy({
-      upstreamBaseUrl: baseUrl,
+      upstreamBaseUrl: providerProxyUpstreamBaseUrl(baseUrl, provider, apiProtocol),
       ...(options.agent === 'maka' ? { advertisedHost: '127.0.0.1' } : {}),
       ...(resolveProviderCredential
         ? { resolveUpstreamCredential: resolveProviderCredential }
         : { apiKeyFile: apiKeyFile! }),
       authMode:
-        options.agent === 'kimi-code'
-          ? 'bearer'
-          : providerProxyAuthMode(provider, options.agentEnv?.MAKA_MODEL_API_PROTOCOL),
-      usageProtocol: providerProxyUsageProtocol(
-        options.agent,
-        provider,
-        options.agentEnv?.MAKA_MODEL_API_PROTOCOL,
-      ),
+        options.agent === 'kimi-code' ? 'bearer' : providerProxyAuthMode(provider, apiProtocol),
+      usageProtocol: providerProxyUsageProtocol(options.agent, provider, apiProtocol),
     });
     return {
       env:
@@ -1228,6 +1224,19 @@ export function providerTokenSummary(
     costUsd,
     pricingSource: 'runtime',
   };
+}
+
+/** OpenAI-compatible Kimi runtimes add /v1 to the advertised proxy base. */
+export function providerProxyUpstreamBaseUrl(
+  baseUrl: string,
+  provider: string,
+  apiProtocol?: string,
+): string {
+  if (provider !== 'kimi-coding-plan' || apiProtocol !== 'openai-chat') return baseUrl;
+  const upstream = new URL(baseUrl);
+  if (!/\/v1\/?$/i.test(upstream.pathname)) return baseUrl;
+  upstream.pathname = upstream.pathname.replace(/\/v1\/?$/i, '') || '/';
+  return upstream.toString();
 }
 
 /** Shared across runners: the selected Kimi protocol overrides its Anthropic registry default. */

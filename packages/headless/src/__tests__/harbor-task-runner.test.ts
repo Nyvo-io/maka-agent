@@ -898,7 +898,7 @@ describe('createHarborTaskRunner', () => {
             const proxyUrl = request.env?.MAKA_HOST_BASE_URL;
             const proxyToken = request.env?.MAKA_HOST_API_KEY;
             assert.ok(proxyUrl && proxyToken);
-            const response = await fetch(`${proxyUrl}/chat/completions`, {
+            const response = await fetch(`${proxyUrl}/v1/chat/completions`, {
               method: 'POST',
               headers: { authorization: `Bearer ${proxyToken}` },
               body: '{}',

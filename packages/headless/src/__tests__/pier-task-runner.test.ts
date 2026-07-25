@@ -1244,8 +1244,10 @@ test('createPierTaskRunner routes a resolver-backed Maka arm through the host pr
 test('createPierTaskRunner applies a task-selected Kimi OpenAI protocol to the host proxy', async () => {
   await withDirs(async ({ jobsDir, repo }) => {
     let upstreamAuthorization = '';
+    let upstreamPath = '';
     const upstream = createHttpServer((request, response) => {
       upstreamAuthorization = request.headers.authorization ?? '';
+      upstreamPath = request.url ?? '';
       response.writeHead(200, { 'content-type': 'text/event-stream' });
       response.end(
         [
@@ -1284,7 +1286,7 @@ test('createPierTaskRunner applies a task-selected Kimi OpenAI protocol to the h
                   return [line.slice(0, index), line.slice(index + 1)];
                 }),
             );
-            const response = await fetch(`${env.MAKA_HOST_BASE_URL}/chat/completions`, {
+            const response = await fetch(`${env.MAKA_HOST_BASE_URL}/v1/chat/completions`, {
               method: 'POST',
               headers: { authorization: `Bearer ${env.MAKA_HOST_API_KEY}` },
               body: '{}',
@@ -1300,6 +1302,7 @@ test('createPierTaskRunner applies a task-selected Kimi OpenAI protocol to the h
         runInput({ agentEnv: { MAKA_MODEL_API_PROTOCOL: 'openai-chat' } }),
       );
       assert.equal(upstreamAuthorization, 'Bearer upstream-key');
+      assert.equal(upstreamPath, '/coding/v1/chat/completions');
       assert.equal(output.cell.tokenSummary?.total, 125);
     } finally {
       await new Promise<void>((resolve, reject) =>

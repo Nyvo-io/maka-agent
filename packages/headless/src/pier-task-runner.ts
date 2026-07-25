@@ -21,6 +21,7 @@ import {
   mergeAgentEnv,
   modelIdForProvider,
   providerProxyAuthMode,
+  providerProxyUpstreamBaseUrl,
   providerProxyUsageProtocol,
   providerRequiresSecret,
   providerTelemetryArtifactRefs,
@@ -714,22 +715,16 @@ async function pierProviderRuntime(
   // a Squid-legal port, defaulting to host.docker.internal unless an explicit
   // advertised host is supplied (the native-Linux escape hatch, e.g. 172.17.0.1).
   const advertisedHost = agent === 'maka' ? '127.0.0.1' : options.providerProxyAdvertisedHost;
+  const apiProtocol = agent === 'maka' ? options.agentEnv?.MAKA_MODEL_API_PROTOCOL : undefined;
   const proxy = await startProviderAuthProxy({
-    upstreamBaseUrl: baseUrl,
+    upstreamBaseUrl: providerProxyUpstreamBaseUrl(baseUrl, provider, apiProtocol),
     ...(advertisedHost !== undefined ? { advertisedHost } : {}),
     ...(proxyPort !== undefined ? { port: proxyPort } : {}),
     ...(options.resolveProviderCredential
       ? { resolveUpstreamCredential: options.resolveProviderCredential }
       : { apiKeyFile: options.apiKeyFile! }),
-    authMode:
-      agent === 'kimi-code'
-        ? 'bearer'
-        : providerProxyAuthMode(provider, options.agentEnv?.MAKA_MODEL_API_PROTOCOL),
-    usageProtocol: providerProxyUsageProtocol(
-      agent,
-      provider,
-      options.agentEnv?.MAKA_MODEL_API_PROTOCOL,
-    ),
+    authMode: agent === 'kimi-code' ? 'bearer' : providerProxyAuthMode(provider, apiProtocol),
+    usageProtocol: providerProxyUsageProtocol(agent, provider, apiProtocol),
   });
 
   return {
