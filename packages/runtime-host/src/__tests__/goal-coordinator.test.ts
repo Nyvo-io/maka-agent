@@ -263,6 +263,7 @@ test('session retirement forgets a terminal Goal without recreating deleted auth
       ...active,
       goal: { ...active.goal, status: 'cleared' },
       currentExecution: null,
+      pendingContinuation: null,
     };
     assert.equal(
       (
@@ -683,6 +684,7 @@ function activeGoalRecord(
       checkpoint: { goalId, revision: 0 },
       controlLease,
     },
+    pendingContinuation: null,
   };
 }
 
