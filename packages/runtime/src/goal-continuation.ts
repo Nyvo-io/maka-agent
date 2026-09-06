@@ -137,7 +137,7 @@ interface ContinuationIntent {
   controlLease: GoalControlLease;
   triggeringTurnId?: string;
   evaluation: GoalEvaluation;
-  prompt?: string;
+  recoveredPrompt?: string;
 }
 
 interface WaitingTimer {
@@ -490,7 +490,7 @@ export class GoalContinuationCoordinator {
       checkpoint: pending.checkpoint,
       controlLease: pending.controlLease,
       ...(pending.triggeringTurnId ? { triggeringTurnId: pending.triggeringTurnId } : {}),
-      prompt: pending.prompt,
+      recoveredPrompt: pending.prompt,
       evaluation: {
         met: false,
         impossible: false,
@@ -830,7 +830,6 @@ export class GoalContinuationCoordinator {
       buildContinuationPrompt(settled, evaluation, undefined),
       GOAL_PENDING_PROMPT_TEXT_LIMIT,
     );
-    lane.intent.prompt = pendingPrompt;
     await this.deps.durability.recordPendingContinuation({
       checkpoint: lane.intent.checkpoint,
       controlLease,
@@ -876,8 +875,8 @@ export class GoalContinuationCoordinator {
       return;
     }
 
-    const prompt = intent.prompt
-      ? `${intent.prompt}${taskPlan.reminder ? `\n\n${taskPlan.reminder}` : ''}`
+    const prompt = intent.recoveredPrompt
+      ? attachTaskReminder(intent.recoveredPrompt, taskPlan.reminder)
       : buildContinuationPrompt(goal, intent.evaluation, taskPlan.reminder);
     const admission = this.deps.admitTurn(
       lane.sessionId,
@@ -992,8 +991,7 @@ export class GoalContinuationCoordinator {
         .recordPendingContinuation({
           checkpoint: lane.intent.checkpoint,
           controlLease: lane.intent.controlLease,
-          prompt:
-            lane.intent.prompt ?? buildContinuationPrompt(woken, lane.intent.evaluation, undefined),
+          prompt: buildContinuationPrompt(woken, lane.intent.evaluation, undefined),
           ...(lane.intent.triggeringTurnId
             ? { triggeringTurnId: lane.intent.triggeringTurnId }
             : {}),
@@ -1067,6 +1065,14 @@ function buildContinuationPrompt(
     `\n\nEvaluation: ${evaluation.reason}${evaluation.waiting ? ' (scheduled external-event re-check)' : ''}\n` +
     `Goal: "${goal.condition}" (turn ${goal.iterations}/${goal.maxIterations}${noProgress})`
   );
+}
+
+function attachTaskReminder(prompt: string, taskReminder: string | undefined): string {
+  if (!taskReminder) return prompt;
+  const evaluationMarker = '\n\nEvaluation:';
+  const evaluationAt = prompt.indexOf(evaluationMarker);
+  if (evaluationAt === -1) return `${prompt}\n\n${taskReminder}`;
+  return `${prompt.slice(0, evaluationAt)}\n\n${taskReminder}${prompt.slice(evaluationAt)}`;
 }
 
 function waitBackoffMs(consecutiveWaits: number): number {

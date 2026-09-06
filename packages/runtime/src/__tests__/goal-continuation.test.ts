@@ -319,6 +319,42 @@ describe('GoalContinuationCoordinator settlement', () => {
     assert.equal(admitted.length, 1);
   });
 
+  test('recovery inserts the task reminder before the frozen evaluation and Goal context', async () => {
+    const { manager, coordinator, admitted } = setup({
+      taskGate: {
+        listActionableTaskKeys: async () => ['T1'],
+      },
+    });
+    const created = manager.create(SESSION, 'ship');
+    assert.equal(created.kind, 'created');
+    const controlLease = manager.getControlLease(SESSION);
+    assert.ok(controlLease);
+    const pendingPrompt =
+      '[Goal continuation] The goal is not yet met. Keep working toward it. ' +
+      'Do not redefine success around a smaller task; match your verification to the full requirement.' +
+      '\n\nEvaluation: preserved durable context\nGoal: "ship" (turn 1/8)';
+
+    coordinator.recoverPendingContinuation({
+      checkpoint: { goalId: created.goal.id, revision: created.goal.revision },
+      controlLease,
+      prompt: pendingPrompt,
+      triggeringTurnId: 'turn-1',
+    });
+
+    await waitFor(() => admitted.length === 1, 'recovered continuation was not admitted');
+
+    const prompt = admitted[0]!.prompt;
+    assert.ok(prompt.indexOf('[Task reminder]') < prompt.indexOf('Evaluation:'));
+    assert.ok(prompt.indexOf('Evaluation:') < prompt.indexOf('Goal:'));
+    assert.equal(
+      prompt,
+      pendingPrompt.replace(
+        '\n\nEvaluation:',
+        '\n\n[Task reminder] Actionable session tasks remain. Reconcile them before stopping: finish them with real evidence, or update their status truthfully. A task is advisory and never overrides files, tests, artifacts, or verifier evidence.\nActionable task keys: T1\n\nEvaluation:',
+      ),
+    );
+  });
+
   test('settlement records a durable continuation outbox entry before admission', async () => {
     const pending: GoalPendingContinuation[] = [];
     const { manager, coordinator, admitted } = setup({
@@ -1477,7 +1513,10 @@ describe('GoalContinuationCoordinator waiting and task gate', () => {
     idle.resolve();
     await waitFor(() => decisions.length === 1, 'started admission was not traced');
     assert.deepEqual(decisions, ['reminder_injected']);
-    assert.match(admitted[0]!.prompt, /Actionable task keys: T1/);
+    const prompt = admitted[0]!.prompt;
+    assert.match(prompt, /Actionable task keys: T1/);
+    assert.ok(prompt.indexOf('[Task reminder]') < prompt.indexOf('Evaluation:'));
+    assert.ok(prompt.indexOf('Evaluation:') < prompt.indexOf('Goal:'));
   });
 
   test('task reminder is injected once per Goal across chained turns', async () => {
