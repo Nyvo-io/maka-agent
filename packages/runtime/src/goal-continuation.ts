@@ -991,7 +991,9 @@ export class GoalContinuationCoordinator {
         .recordPendingContinuation({
           checkpoint: lane.intent.checkpoint,
           controlLease: lane.intent.controlLease,
-          prompt: buildContinuationPrompt(woken, lane.intent.evaluation, undefined),
+          prompt:
+            lane.intent.recoveredPrompt ??
+            buildContinuationPrompt(woken, lane.intent.evaluation, undefined),
           ...(lane.intent.triggeringTurnId
             ? { triggeringTurnId: lane.intent.triggeringTurnId }
             : {}),
