@@ -1468,6 +1468,65 @@ describe('GoalContinuationCoordinator waiting and task gate', () => {
     assert.equal(manager.get(SESSION)?.consecutiveNoProgress, 0);
   });
 
+  test('waiting recovery preserves its frozen prompt across wake, busy admission, and re-recovery', async () => {
+    const pending: GoalPendingContinuation[] = [];
+    const idle = deferred<void>();
+    const { manager, coordinator, scheduler, deps, attemptedPrompts, setAdmission } = setup({
+      durability: {
+        ...volatileGoalDurability,
+        recordPendingContinuation: async (entry) => {
+          pending.push(entry);
+        },
+      },
+    });
+    const created = manager.create(SESSION, 'wait for build');
+    assert.equal(created.kind, 'created');
+    const waiting = manager.settleTurn(SESSION, {
+      checkpoint: { goalId: created.goal.id, revision: created.goal.revision },
+      verdict: 'continue',
+      waiting: true,
+      reason: 'Waiting for build 123.',
+    });
+    assert.equal(waiting?.status, 'waiting');
+    const controlLease = manager.getControlLease(SESSION);
+    assert.ok(controlLease);
+    const frozenPrompt = 'Wait for build 123 to complete before continuing.';
+
+    setAdmission(() => ({ kind: 'busy', whenIdle: idle.promise }));
+    coordinator.recoverPendingContinuation({
+      checkpoint: { goalId: waiting!.id, revision: waiting!.revision },
+      controlLease,
+      prompt: frozenPrompt,
+      triggeringTurnId: 'turn-1',
+    });
+    await waitFor(
+      () => scheduler.pendingDelays().length === 1,
+      'waiting recovery was not scheduled',
+    );
+
+    scheduler.fireNext();
+    await waitFor(
+      () => attemptedPrompts.length === 1,
+      'woken continuation did not reach busy admission',
+    );
+    await waitFor(() => pending.length === 1, 'woken continuation was not persisted');
+    assert.equal(pending[0]!.prompt, frozenPrompt);
+
+    coordinator.dispose();
+    const recoveryScheduler = new ManualScheduler();
+    const recoveredCoordinator = new GoalContinuationCoordinator({
+      ...deps,
+      scheduler: recoveryScheduler,
+    });
+    recoveredCoordinator.recoverPendingContinuation(pending[0]!);
+    await waitFor(
+      () => attemptedPrompts.length === 2,
+      'recovered busy continuation did not reuse the persisted prompt',
+    );
+    assert.equal(attemptedPrompts[1], frozenPrompt);
+    recoveredCoordinator.dispose();
+  });
+
   test('a real user turn preempts waiting and cancels its retry', async () => {
     const { manager, coordinator, scheduler, admitted, queueEvaluations } = setup({
       evaluations: [{ waiting: true, progress: false, reason: 'CI running' }],
