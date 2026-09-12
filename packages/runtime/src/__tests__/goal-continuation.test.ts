@@ -1231,8 +1231,15 @@ describe('GoalContinuationCoordinator admission and completion', () => {
   });
 
   test('new completion evidence outranks an intent waiting on busy', async () => {
+    const cleared: string[] = [];
     const { manager, coordinator, admitted, setAdmission } = setup({
       evaluations: [{ reason: 'old intent' }, { reason: 'new intent' }],
+      durability: {
+        ...volatileGoalDurability,
+        clearPendingContinuation: async (sessionId) => {
+          cleared.push(sessionId);
+        },
+      },
     });
     const idle = deferred<void>();
     let attempts = 0;
@@ -1246,6 +1253,7 @@ describe('GoalContinuationCoordinator admission and completion', () => {
     await settleExternal(coordinator, SESSION, { kind: 'completed', turnId: 'turn-1' });
     await waitFor(() => attempts === 1, 'first admission was not attempted');
     await settleExternal(coordinator, SESSION, { kind: 'completed', turnId: 'turn-2' });
+    assert.deepEqual(cleared, [SESSION]);
     idle.resolve();
     await waitFor(() => admitted.length === 1, 'new evidence was not admitted after idle');
 
@@ -1253,6 +1261,51 @@ describe('GoalContinuationCoordinator admission and completion', () => {
     assert.equal(admitted.length, 1);
     assert.match(admitted[0]!.prompt, /new intent/);
     assert.doesNotMatch(admitted[0]!.prompt, /old intent/);
+  });
+
+  test('durable intent supersession preserves concurrent evidence order', async () => {
+    const supersessionStarted = deferred<void>();
+    const releaseSupersession = deferred<void>();
+    let blockSupersession = false;
+    const { manager, coordinator, setAdmission } = setup({
+      evaluations: [
+        { reason: 'old intent' },
+        { reason: 'first new evidence' },
+        { reason: 'second new evidence' },
+      ],
+      durability: {
+        ...volatileGoalDurability,
+        clearPendingContinuation: async () => {
+          if (!blockSupersession) return;
+          blockSupersession = false;
+          supersessionStarted.resolve();
+          await releaseSupersession.promise;
+        },
+      },
+    });
+    setAdmission(() => ({ kind: 'busy', whenIdle: new Promise<void>(() => {}) }));
+    manager.create(SESSION, 'ship');
+
+    await settleExternal(coordinator, SESSION, { kind: 'completed', turnId: 'turn-1' });
+    blockSupersession = true;
+    const settlementOrder: string[] = [];
+    const first = settleExternal(coordinator, SESSION, {
+      kind: 'completed',
+      turnId: 'turn-2',
+    }).then(() => settlementOrder.push('turn-2'));
+    await supersessionStarted.promise;
+    const second = settleExternal(coordinator, SESSION, {
+      kind: 'completed',
+      turnId: 'turn-3',
+    }).then(() => settlementOrder.push('turn-3'));
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.deepEqual(settlementOrder, []);
+    releaseSupersession.resolve();
+    await Promise.all([first, second]);
+    assert.deepEqual(settlementOrder, ['turn-2', 'turn-3']);
+
+    coordinator.dispose();
   });
 
   test('a stale owned-turn failure cannot erase a newer intent waiting on busy', async () => {
@@ -1281,6 +1334,44 @@ describe('GoalContinuationCoordinator admission and completion', () => {
     await waitFor(() => attempts === 3, 'stale failure erased the newer busy intent');
     assert.equal(admitted.length, 2);
     assert.match(admitted[1]!.prompt, /new external evidence/);
+  });
+
+  test('a stale queued Goal-owned completion cannot erase a newer intent', async () => {
+    const evaluation = controlledCall<string>();
+    const { manager, coordinator, deps, admitted } = setup({
+      evaluations: [{ reason: 'first continuation' }],
+    });
+    manager.create(SESSION, 'ship');
+    await settleExternal(coordinator, SESSION, { kind: 'completed', turnId: 'turn-1' });
+    await waitFor(() => admitted.length === 1, 'Goal-owned turn was not admitted');
+
+    deps.evaluator.evaluate = () => evaluation.invoke();
+    const external = settleExternal(coordinator, SESSION, {
+      kind: 'completed',
+      turnId: 'turn-2',
+    });
+    await evaluation.started;
+    admitted[0]!.completion.resolve({
+      kind: 'completed',
+      turnId: admitted[0]!.turnId,
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    evaluation.resolve(
+      JSON.stringify({
+        met: false,
+        impossible: false,
+        progress: true,
+        waiting: false,
+        reason: 'new external evidence',
+      }),
+    );
+
+    await external;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(admitted.length, 2);
+    assert.match(admitted[1]!.prompt, /new external evidence/);
+
+    coordinator.dispose();
   });
 
   test('unavailable admission pauses instead of leaving a false active Goal', async () => {
