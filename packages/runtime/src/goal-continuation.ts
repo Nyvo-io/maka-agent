@@ -85,6 +85,7 @@ export interface GoalContinuationScheduler {
 export interface GoalDurabilityPort {
   flush(sessionId: string): Promise<void>;
   recordPendingContinuation(pending: GoalPendingContinuation): Promise<void>;
+  clearPendingContinuation(sessionId: string, controlLease: GoalControlLease): Promise<void>;
   recordCurrentExecution(current: GoalCurrentExecution): Promise<void>;
   settleCurrentExecution(sessionId: string, turnId: string): Promise<void>;
 }
@@ -92,6 +93,7 @@ export interface GoalDurabilityPort {
 export const volatileGoalDurability: GoalDurabilityPort = Object.freeze({
   flush: async () => {},
   recordPendingContinuation: async () => {},
+  clearPendingContinuation: async () => {},
   recordCurrentExecution: async () => {},
   settleCurrentExecution: async () => {},
 });
@@ -567,9 +569,6 @@ export class GoalContinuationCoordinator {
     registration: TurnRegistration,
   ): Promise<void> {
     const lane = registration.lane;
-    // New evidence always outranks an older, not-yet-admitted continuation.
-    lane.intent = undefined;
-    this.clearWaitingTimer(lane);
     return new Promise<void>((resolve) => {
       lane.queue.push({
         turnId: registration.turnId,
@@ -702,10 +701,23 @@ export class GoalContinuationCoordinator {
     if (!this.deps.goalManager.matchesControlLease(lane.sessionId, item.controlLease)) {
       return;
     }
-    const goal = this.deps.goalManager.get(lane.sessionId)!;
     if (item.checkpoint && !this.deps.goalManager.matchesActive(lane.sessionId, item.checkpoint)) {
       return;
     }
+    if (sameGoalControlLease(lane.intent?.controlLease, item.controlLease)) {
+      // New evidence always outranks an older, not-yet-admitted continuation.
+      lane.intent = undefined;
+      this.clearWaitingTimer(lane);
+      await this.deps.durability.clearPendingContinuation(lane.sessionId, item.controlLease);
+      if (
+        !this.isCurrent(lane) ||
+        !this.deps.goalManager.matchesControlLease(lane.sessionId, item.controlLease) ||
+        (item.checkpoint && !this.deps.goalManager.matchesActive(lane.sessionId, item.checkpoint))
+      ) {
+        return;
+      }
+    }
+    const goal = this.deps.goalManager.get(lane.sessionId)!;
     if (item.outcome.kind !== 'completed') {
       if (goal.status !== 'active' && goal.status !== 'waiting') return;
       this.pauseAtCheckpoint(
