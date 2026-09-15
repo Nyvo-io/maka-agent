@@ -6,7 +6,7 @@ source_language: en
 implementation_status: planned
 document_status: draft
 translation_status: source-only
-last_verified: 2026-09-14
+last_verified: 2026-09-15
 owners:
   - maka-desktop
 ---
@@ -108,8 +108,8 @@ guards from #5109/#5118 are prerequisites, not duplicated work.
   containing either are excluded from the actual provider request. This is proven
   by capturing provider input with a fixed provider double; transcript assertions
   are insufficient.
-- A committed target admits exactly one first post-copy Turn. A failed send does
-  not create another target or leave it open to a second replacement.
+- Replaying a retry request never admits a second replacement or silently creates
+  another target. Starting again after abandonment is an explicit new attempt.
 - Regenerate and Edit share eligibility, copy, and recovery semantics; only input
   content differs.
 - Branch remains inclusive and is not converted into retry or a revision-family
@@ -137,10 +137,13 @@ The retry contract is therefore:
 - The Host derives a stable first-message and first-Turn identity from the retry
   request, its copy fingerprint, and canonical replacement content, and returns
   that identity with the copy result.
+- Before copy commit, the existing `conversationCopy` record binds those identities
+  and the canonical-content digest. This adds neither a separate plan table nor
+  duplicate family provenance; the digest validates input but cannot restore it.
 - The first root-turn admission persists that identity, canonical-content digest,
   target Session, and replacement Turn through the existing admission authority.
 - A replay with the same derived identities resolves to `existing`. A different
-  identity or canonical content for the same retry plan is a conflict and cannot
+  identity or canonical content for the same target copy is a conflict and cannot
   append a second replacement.
 
 Per-message idempotency alone is insufficient: a normal later message in the
@@ -173,26 +176,29 @@ Host admission.
 
 ## Recovery and retention
 
-Current `SessionRevisionCoordinator.recover()` retains a committed revision
-target only when it is already committed or holds a root-turn admission. A crash
-after copy commit but before first admission therefore discards the target. That
-does not satisfy this contract.
+Recovery resolves a client request; it does not autonomously submit an unadmitted
+replacement. Before admission, the initiating client owns the complete canonical
+payload and target identity. No durable draft storage or restoration after client
+exit is promised. The Host stores only the copy binding, not recoverable input.
 
-The retry plan must persist with the copy: family root, parent Session, `T`, and
-the derived first-message identity and canonical-content digest. Recovery then
-has three explicit boundaries:
+| Boundary | Required behavior |
+|---|---|
+| Lost copy acknowledgement | The client resolves the original target identity and resends the complete payload. The Host validates the binding before admission. If the target is absent or abandoned, report that outcome; do not silently create another copy. |
+| Client exit before admission | Do not submit automatically. The client requests `session.revision.abandon` on cancellation or orderly exit. If it disappears without cleanup, Host `recover()` cleans up the unadmitted orphan under existing rules on restart. |
+| Lost admission acknowledgement | Resolve the existing root-turn admission and return its outcome. Do not admit a second replacement or re-execute the model because of the replay. |
+| Changed-content replay | Reject as a conflict against the original copy binding, both before and after admission. Normal later sends remain valid. |
 
-1. Before copy commit, it may discard the preparing target; no plan exists.
-2. After copy commit and before first admission, it retains a readable retry
-   plan and may admit only that bound first message.
-3. After admission and before acknowledgement or publication, the admission is
-   the proof; recovery republishes or resumes that same Turn and never starts a
-   new model execution.
+The client rediscovers a hidden target by its original target identity, not the
+ordinary catalog. Without that identity and payload, no client-side continuation
+is promised; orphan cleanup belongs to the Host. Preparing copies may also be
+discarded by existing recovery. A new attempt after cleanup requires an explicit
+client request and fresh eligibility checks.
 
-The `recover()` retention rule must retain a committed revision copy with a
-valid retry plan even without an admission. A malformed plan or missing source
-is abandoned. No state is considered admitted merely because an acknowledgement
-was lost.
+This does not expand retention: existing committed-dependent protections still
+apply, and `session.revision.abandon` retains its `abandoned | retained` outcomes.
+Any missing-source abandonment applies only to unadmitted targets. An admitted
+target recovers from its own admission and runtime facts, independently of the
+source. A lost acknowledgement alone is never proof of admission.
 
 ## Provider-input verification
 
@@ -230,29 +236,24 @@ are satisfied.
    process required by `CONTRIBUTING` for material product decisions.
 2. A long-history copy baseline: latency, copied bytes, SQLite write
    amplification, and cold-restart time for a representative Session.
-3. A decision on retaining a planned-but-unadmitted target and on its
-   user-visible abandonment behavior.
 
 **Implementation order:**
 
-1. Persist the retry plan with the copy and return derived first-message and
+1. Persist the binding in `conversationCopy` and return derived first-message and
    first-Turn identities from the copy operation.
 2. Add or adapt one Host retry operation that composes revision copy and normal
    send, with a first-replacement guard on the target copy.
-3. Retain and recover planned-but-unadmitted targets in `recover()`.
+3. Implement client request resolution and abandonment under the recovery rules
+   above, without expanding Host retention.
 4. Route Desktop Regenerate through the operation and remove the unchanged-Edit
    redirect.
-5. Add provider-input, lineage, idempotency, disconnect, and copy/admission
-   failure tests.
+5. Add provider-input, lineage, idempotency, and tests for all four recovery
+   boundaries above.
 
 ## Open questions
 
 - Does Desktop need a cross-Session "retried from `T`" badge, or is
   version-family navigation sufficient?
-- Should the retry plan extend the existing `conversationCopy` record or live in
-  a separate revision-plan row?
-- Should `session.revision.abandon` distinguish a planned-but-unadmitted target
-  from its current `abandoned | retained` outcomes?
 
 ## Implementation anchors
 
