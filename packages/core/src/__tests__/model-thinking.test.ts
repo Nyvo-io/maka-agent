@@ -224,7 +224,12 @@ test('modelOverride honours a declaration on any provider', () => {
 
 test('normalizeModelOverrides sanitizes write-side tables', () => {
   const sanitized = normalizeModelOverrides({
-    reasoner: { thinkingLevels: ['high', 'low', 'turbo'], vision: true, contextWindow: 200_000 },
+    reasoner: {
+      thinkingLevels: ['high', 'low', 'turbo'],
+      vision: true,
+      contextWindow: 200_000,
+      compactionThreshold: 0,
+    },
     empty: {},
     junk: 'not-an-entry',
     huge: { contextWindow: 2 ** 60 },
@@ -234,7 +239,12 @@ test('normalizeModelOverrides sanitizes write-side tables', () => {
   assert.deepEqual(sanitized, {
     empty: {},
     huge: {},
-    reasoner: { thinkingLevels: ['low', 'high'], vision: true, contextWindow: 200_000 },
+    reasoner: {
+      thinkingLevels: ['low', 'high'],
+      vision: true,
+      contextWindow: 200_000,
+      compactionThreshold: 0,
+    },
   });
   assert.equal(normalizeModelOverrides({}), undefined);
   assert.equal(normalizeModelOverrides(undefined), undefined);
