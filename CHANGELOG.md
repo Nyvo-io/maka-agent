@@ -47,6 +47,7 @@
 
 ### Changed
 
+- Proactive context compaction now defaults to 65% of the effective model input window when the threshold is empty. Explicit thresholds (including migrated values) remain unchanged. Enter `off` or `0` in connection model settings to disable proactive compaction; percentage inputs are converted to token counts at save time (#5574).
 - Custom connections now use one provider type with a default API protocol and per-model overrides. Legacy connections migrate while retaining identifiers, credentials and model overrides (#5684).
 - TUI queue and retract shortcuts use Tab and Shift+Left in place of Alt chords (#5910).
 - Manual archiving now refuses a task while a WorkHub delegation or a live linked child task still points at it, instead of hiding it from WorkHub (#5957).
@@ -56,7 +57,7 @@
 
 ### Upgrade notes
 
-- Update Desktop, CLI and remote Runtime Hosts together. The Runtime Host compatibility epoch is 217 (176 in the 0.2.0 source release); mismatched peers cannot connect.
+- Update Desktop, CLI and remote Runtime Hosts together. The Runtime Host compatibility epoch is 223 (176 in the 0.2.0 source release); mismatched peers cannot connect.
 - Back up configuration and workspace data before upgrading if rollback is needed. Custom connection catalogs migrate to schema v3, and new session records include fields older builds cannot decode; 0.2.0 cannot safely reuse data written by 0.2.1.
 - Review every messaging platform's sender list before enabling its channel. A nonempty list now admits only its listed platform user IDs, including WorkHub routing; an empty list retains unrestricted sender access (#6074).
 - Archived-task retention remains opt-in. Enabling it allows permanent deletion of eligible archived tasks; leave it disabled to retain them.

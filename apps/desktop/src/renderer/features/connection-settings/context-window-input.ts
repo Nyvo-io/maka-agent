@@ -36,11 +36,13 @@ export function parseCompactionThresholdInput(
   effectiveContextWindow: number | undefined,
 ): number | null {
   const normalized = input.trim().toLowerCase();
-  if (normalized === 'off' || normalized === '0') return 0;
+  if (normalized === 'off' || /^0+(?:\.0+)?[km]?$/.test(normalized)) return 0;
   if (normalized.endsWith('%')) {
-    if (effectiveContextWindow === undefined) return null;
+    if (!/^\d+(?:\.\d+)?%$/.test(normalized)) return null;
     const percentage = Number(normalized.slice(0, -1));
-    if (!Number.isFinite(percentage) || percentage <= 0 || percentage > 100) return null;
+    if (!Number.isFinite(percentage) || percentage > 100) return null;
+    if (percentage === 0) return 0;
+    if (effectiveContextWindow === undefined) return null;
     const value = Math.round((effectiveContextWindow * percentage) / 100);
     return Number.isSafeInteger(value) && value > 0 ? value : null;
   }

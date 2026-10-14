@@ -74,7 +74,9 @@ export function buildChatModelChoices(
           : { defaultThinkingLevel: entry.defaultThinkingLevel }),
         supportsVision: entry.supportsVision,
         ...(entry.contextWindow !== undefined ? { contextWindow: entry.contextWindow } : {}),
-        ...(declaredWindow !== undefined ? { declaredContextWindow: declaredWindow } : {}),
+        ...(declaredWindow !== undefined && declaredWindow > 0
+          ? { declaredContextWindow: declaredWindow }
+          : {}),
       });
     }
   }

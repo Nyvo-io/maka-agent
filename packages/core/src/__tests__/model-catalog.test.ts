@@ -48,6 +48,17 @@ function verdict(input: BuildModelCatalogInput) {
   return { ok: entry?.canUseAsChatDefault === true };
 }
 
+test('catalog transport preserves an explicit compaction opt-out', () => {
+  const [entry] = buildModelCatalogEntries({
+    providerType: 'custom',
+    models: [{ id: 'custom', contextWindow: 64_000 }],
+    modelOverrides: { custom: { compactionThreshold: 0 } },
+  });
+  assert.ok(entry);
+  assert.equal(decodeModelCatalogEntry(JSON.parse(JSON.stringify(entry))).compactionThreshold, 0);
+  assert.throws(() => decodeModelCatalogEntry({ ...entry, compactionThreshold: -1 }));
+});
+
 test('catalog transport preserves independent limits and their unmodified defaults', () => {
   const [entry] = buildModelCatalogEntries({
     providerType: 'custom',

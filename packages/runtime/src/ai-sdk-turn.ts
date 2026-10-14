@@ -1906,7 +1906,9 @@ export class AiSdkTurn {
               midTurnState?.stepShaping.clear();
               // Fail closed: reset on every step boundary so a missing final
               // step's usage does not leave a stale value from an earlier step.
-              // The reply needed more room than the declared window had
+              // The reply crossed the effective compaction threshold (explicit
+              // or derived from model capacity), not necessarily the model limit.
+              // It needed more room than the threshold had
               // left after this request's own input. Both halves are the
               // provider's numbers, read after the fact: the reserve that
               // should have kept them apart was measured from a smaller
@@ -1928,14 +1930,10 @@ export class AiSdkTurn {
                   declaredContextWindow: midTurnState.capacity,
                 });
               }
-              // Nothing declared, and the provider accepted a request past
-              // the window this model reports. Every other signal in this
-              // design stays dark there: no rejection to recover from and
-              // no declaration to arm the proactive threshold, so the
-              // session degrades quietly and
-              // indefinitely (#4634). Report the two real numbers and
-              // leave the decision with the user: a reported window is a
-              // hint, and Maka still declares nothing on their behalf.
+              // Proactive compaction is inactive (for example, explicitly off),
+              // and the provider accepted a request past its reported window.
+              // Report the real numbers without implying that an absent user
+              // override disables the default (#4634).
               //
               // Once per crossing, not once per send. On these providers
               // usage keeps growing past the line (305K → 322K observed),

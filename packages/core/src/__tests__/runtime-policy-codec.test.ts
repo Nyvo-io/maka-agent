@@ -33,6 +33,13 @@ import {
   RuntimePolicyDomainDecodeError,
 } from '../runtime-policy.js';
 
+test('model override transport preserves zero as an explicit compaction opt-out', () => {
+  const profiles = { model: { compactionThreshold: 0 } };
+  assert.deepEqual(decodeModelOverridesTable(JSON.parse(JSON.stringify(profiles))), profiles);
+  assert.throws(() => decodeModelOverridesTable({ model: { compactionThreshold: -1 } }));
+  assert.throws(() => decodeModelOverridesTable({ model: { contextWindow: 0 } }));
+});
+
 test('normalizes policy input while canonical policy decode rejects producer drift', () => {
   const mutation = normalizeRuntimePolicyMutation({
     expectedRevision: 0,

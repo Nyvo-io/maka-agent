@@ -20,7 +20,6 @@
 import type { RuntimeExecutionConnection } from '@maka/core/llm-connections';
 import {
   declaredContextWindow,
-  modelOverride,
   resolveModelLimits,
   modelLimitsConflict,
 } from '@maka/core/model-thinking';
@@ -36,7 +35,7 @@ export interface BuildDefaultContextBudgetPolicyOptions {
 /**
  * The shipped context-budget policy. It carries no history budget and no
  * reserve: whether a request fits is the provider's answer, and the only
- * proactive threshold is the context window the user declared for the model
+ * proactive threshold is the explicit target or 65% of effective model capacity
  * (see `resolveDeclaredContextWindow`), read by the compaction seam itself.
  * What remains here are content policies — how one oversized Tool Result
  * enters the request — and the compaction switches (#4559).

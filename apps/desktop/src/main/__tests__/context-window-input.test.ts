@@ -22,7 +22,7 @@ import { test } from 'node:test';
 import {
   parseCompactionThresholdInput,
   parseContextWindowInput,
-} from '../../renderer/features/connection-settings/context-window-input.js';
+} from '../../renderer/features/connection-settings/index.js';
 
 test('context windows preserve integers and parse decimal K/M without rounding', () => {
   const cases: Array<[string, number]> = [
@@ -57,4 +57,14 @@ test('compaction thresholds accept percentages and an explicit off value', () =>
   assert.equal(parseCompactionThresholdInput('0', 800_000), 0);
   assert.equal(parseCompactionThresholdInput('65%', undefined), null);
   assert.equal(parseCompactionThresholdInput('1.5M', 800_000), 1_500_000);
+});
+
+test('compaction percentages use strict decimals with a consistent zero opt-out', () => {
+  for (const input of ['0x41%', '1e1%', '65.%', '101%', '-1%', '%', 'Infinity%']) {
+    assert.equal(parseCompactionThresholdInput(input, 1_000_000), null, input);
+  }
+  for (const input of ['0%', '00', '0k', '0.0M', 'OFF']) {
+    assert.equal(parseCompactionThresholdInput(input, undefined), 0, input);
+  }
+  assert.equal(parseCompactionThresholdInput('100%', 8192), 8192);
 });

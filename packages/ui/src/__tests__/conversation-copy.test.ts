@@ -21,6 +21,19 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { getConversationCopy } from '../conversation-copy.js';
 
+test('compaction notes describe an effective threshold without inventing a user declaration', () => {
+  for (const locale of ['en', 'zh-CN', 'zh-TW'] as const) {
+    const notes = getConversationCopy(locale).messages.systemNotes;
+    const overrun = notes.contextWindowOverrun(70_000, 65_000);
+    const suggestion = notes.contextWindowSuggestion(60_000, 65_000);
+    const reported = notes.contextReportedWindowExceeded(110_000, 100_000);
+    assert.doesNotMatch(overrun + suggestion, /your declared|你声明|你宣告/);
+    assert.doesNotMatch(reported, /Nothing is declared|你未声明|你未宣告/);
+    assert.match(overrun, /65000/);
+    assert.match(suggestion, /60000/);
+  }
+});
+
 test('goal token labels use shared compact units in every locale', () => {
   for (const locale of ['en', 'zh-CN', 'zh-TW'] as const) {
     const { goalTokens } = getConversationCopy(locale).chat;

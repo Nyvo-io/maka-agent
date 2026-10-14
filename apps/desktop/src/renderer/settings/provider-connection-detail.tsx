@@ -721,7 +721,13 @@ function ConnectionDetailInner(props: ConnectionDetailProps) {
         isSubmitDisabled={!hasModelChanges || contextWindowInputInvalid || numericInvalid || limitsConflict}
         onClose={() => { if (editingModelId !== null) resetDraftProfile(editingModelId); setEditingRow(null); }}
         onSubmit={async () => {
-            if (await saveModelParameters()) setEditingRow(null);
+            const input = numericInputs?.compactionThreshold;
+            const value = input === undefined || input.trim() === ''
+              ? undefined
+              : parseCompactionThresholdInput(input, compactionContextWindow);
+            if (value === null) return;
+            const patch = input === undefined ? {} : { compactionThreshold: value };
+            if (await saveModelParameters(patch)) setEditingRow(null);
           }}
         >
         {editingModelId !== null && <CapabilityEditor

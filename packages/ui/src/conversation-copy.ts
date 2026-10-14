@@ -527,12 +527,12 @@ const conversationCopyZhCn: ConversationCopy = {
         contextCompactionFailedOpen: '上下文压缩失败。',
         contextWindowSuggestion: (tokens, declared) =>
           declared === undefined
-            ? `供应商拒绝了这次请求。该模型未声明上下文窗口；上次成功的用量约 ${tokens} tokens，可将窗口设为该值让 Maka 先行压缩。`
-            : `供应商拒绝了这次请求，但用量（约 ${tokens} tokens）低于你声明的窗口（${declared}）。声明值可能大于供应商实际窗口，建议下调到 ${tokens}。`,
+            ? `供应商拒绝了这次请求。当前没有生效的主动压缩阈值；上次成功的用量约 ${tokens} tokens，可将压缩阈值设为该值让 Maka 先行压缩。`
+            : `供应商拒绝了这次请求，但用量（约 ${tokens} tokens）低于当前压缩阈值（${declared}）。有效阈值可能过高，建议下调到 ${tokens}。`,
         contextWindowOverrun: (used, declared) =>
-          `本次交换用了约 ${used} tokens，超过你声明的窗口（${declared}）：回复需要的空间比剩余的多。Maka 会在下一次请求前压缩；若希望回复保持完整，可调大窗口。`,
+          `本次交换用了约 ${used} tokens，超过当前压缩阈值（${declared}）。Maka 会在下一次请求前压缩；这不代表已超过模型的上下文窗口。`,
         contextReportedWindowExceeded: (used, reported) =>
-          `本次交换用了约 ${used} tokens，已超过该模型上报的窗口（${reported}），但供应商没有拒绝。你未声明窗口，Maka 因此不会主动压缩。在连接设置里声明一个窗口即可让它先行压缩。`,
+          `本次交换用了约 ${used} tokens，已超过该模型上报的窗口（${reported}），但供应商没有拒绝。主动压缩当前未生效；可在连接设置里清空压缩阈值以恢复默认值，或设置正数阈值。`,
         contextOverflowAfterCompaction:
           '已经压缩过历史，供应商仍然说这次请求太大。剩下的部分还包含系统提示、工具定义、摘要和最近的原文，缩短这条消息是你能控制的那一半。',
         contextUsageLabel: '用量',
@@ -651,12 +651,12 @@ const conversationCopyZhTw: ConversationCopy = {
         contextCompactionFailedOpen: '上下文壓縮失敗。',
         contextWindowSuggestion: (tokens, declared) =>
           declared === undefined
-            ? `供應商拒絕了這次請求。該模型未宣告上下文視窗；上次成功的用量約 ${tokens} tokens，可將視窗設為該值讓 Maka 先行壓縮。`
-            : `供應商拒絕了這次請求，但用量（約 ${tokens} tokens）低於你宣告的視窗（${declared}）。宣告值可能大於供應商實際視窗，建議下調到 ${tokens}。`,
+            ? `供應商拒絕了這次請求。目前沒有生效的主動壓縮門檻；上次成功的用量約 ${tokens} tokens，可將壓縮門檻設為該值讓 Maka 先行壓縮。`
+            : `供應商拒絕了這次請求，但用量（約 ${tokens} tokens）低於目前壓縮門檻（${declared}）。有效門檻可能過高，建議下調到 ${tokens}。`,
         contextWindowOverrun: (used, declared) =>
-          `本次交換用了約 ${used} tokens，超過你宣告的視窗（${declared}）：回覆需要的空間比剩餘的多。Maka 會在下一次請求前壓縮；若希望回覆保持完整，可調大視窗。`,
+          `本次交換用了約 ${used} tokens，超過目前壓縮門檻（${declared}）。Maka 會在下一次請求前壓縮；這不代表已超過模型的上下文視窗。`,
         contextReportedWindowExceeded: (used, reported) =>
-          `本次交換用了約 ${used} tokens，已超過該模型上報的視窗（${reported}），但供應商沒有拒絕。你未宣告視窗，Maka 因此不會主動壓縮。在連線設定裡宣告一個視窗即可讓它先行壓縮。`,
+          `本次交換用了約 ${used} tokens，已超過該模型上報的視窗（${reported}），但供應商沒有拒絕。主動壓縮目前未生效；可在連線設定裡清空壓縮門檻以恢復預設值，或設定正數門檻。`,
         contextOverflowAfterCompaction:
           '已經壓縮過歷史，供應商仍然說這次請求太大。剩下的部分還包含系統提示、工具定義、摘要和最近的原文，縮短這則訊息是你能控制的那一半。',
         contextUsageLabel: '用量',
@@ -773,12 +773,12 @@ const conversationCopyEn: ConversationCopy = {
         contextCompactionFailedOpen: 'Context compaction failed.',
         contextWindowSuggestion: (tokens, declared) =>
           declared === undefined
-            ? `The provider rejected this request. No context window is declared for this model; the last accepted usage was about ${tokens} tokens — set the window to that value so Maka compacts first.`
-            : `The provider rejected this request at about ${tokens} tokens, below your declared window (${declared}). The declared value is likely larger than the provider's; consider lowering it to ${tokens}.`,
+            ? `The provider rejected this request. No proactive compaction threshold is active; the last accepted usage was about ${tokens} tokens — set the compaction threshold to that value so Maka compacts first.`
+            : `The provider rejected this request at about ${tokens} tokens, below the effective compaction threshold (${declared}). The threshold may be too high; consider lowering it to ${tokens}.`,
         contextWindowOverrun: (used, declared) =>
-          `This exchange used about ${used} tokens against your declared window (${declared}): the reply needed more room than was left. Maka compacts before the next request; raise the window if the replies should stay whole.`,
+          `This exchange used about ${used} tokens, past the effective compaction threshold (${declared}). Maka compacts before the next request; this does not mean the model's context window was exceeded.`,
         contextReportedWindowExceeded: (used, reported) =>
-          `This exchange used about ${used} tokens, past the ${reported} this model reports, and the provider accepted it without complaint. Nothing is declared, so Maka does not compact on its own. Declare a context window in the connection settings to have it compact first.`,
+          `This exchange used about ${used} tokens, past the ${reported} this model reports, and the provider accepted it. Proactive compaction is not active; clear the compaction threshold in connection settings to restore the default, or set a positive threshold.`,
         contextOverflowAfterCompaction:
           'History was compacted and the provider still called this request too large. What remains also carries the system prompt, the tool schemas, the summary and the recent tail; shortening this message is the part you control.',
         contextUsageLabel: 'Usage',

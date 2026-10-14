@@ -354,12 +354,16 @@ test('chat model choices keep provider metadata separate from user context decla
       providerType: 'custom',
       enabled: true,
       defaultModel: 'declared-model',
-      enabledModelIds: ['declared-model', 'reported-model'],
+      enabledModelIds: ['declared-model', 'reported-model', 'disabled-model'],
       models: [
         { id: 'declared-model', contextWindow: 64_000, inputLimit: 48_000 },
         { id: 'reported-model', contextWindow: 128_000 },
+        { id: 'disabled-model', contextWindow: 64_000 },
       ],
-      modelOverrides: { 'declared-model': { compactionThreshold: 32_000 } },
+      modelOverrides: {
+        'declared-model': { compactionThreshold: 32_000 },
+        'disabled-model': { compactionThreshold: 0 },
+      },
       createdAt: 1,
       updatedAt: 1,
     },
@@ -374,6 +378,7 @@ test('chat model choices keep provider metadata separate from user context decla
     [
       { model: 'declared-model', contextWindow: 64_000, declaredContextWindow: 32_000 },
       { model: 'reported-model', contextWindow: 128_000, declaredContextWindow: undefined },
+      { model: 'disabled-model', contextWindow: 64_000, declaredContextWindow: undefined },
     ],
   );
 });

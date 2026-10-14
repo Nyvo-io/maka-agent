@@ -2224,6 +2224,11 @@ describe('reactive overflow recovery in the streaming backend', () => {
       contextWindow: 200_000,
       declareContextWindow: true,
     },
+    {
+      name: 'below the implicit default threshold',
+      contextWindow: 200_000,
+      declareContextWindow: false,
+    },
   ]) {
     test(`suggests a Maka window after provider overflow ${scenario.name}`, async () => {
       // The one fold is spent on the first rejection and the resend is
@@ -2245,7 +2250,9 @@ describe('reactive overflow recovery in the streaming backend', () => {
       assert.equal(note?.kind, 'context_window_suggestion');
       assert.deepEqual(note?.data, {
         suggestedContextWindow: 120,
-        ...(scenario.declareContextWindow ? { declaredContextWindow: 200_000 } : {}),
+        ...(scenario.withoutContextWindow
+          ? {}
+          : { declaredContextWindow: scenario.declareContextWindow ? 200_000 : 130_000 }),
       });
     });
   }

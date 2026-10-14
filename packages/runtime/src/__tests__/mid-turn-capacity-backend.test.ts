@@ -108,8 +108,9 @@ interface MidTurnFixtureOptions {
   contextWindow?: number;
   /** Omit the model's context window entirely (unknown model metadata). */
   withoutContextWindow?: boolean;
-  /** Keep the model-reported window as metadata without making it a Maka target. */
+  /** Omit an explicit target so runtime resolves its default from model facts. */
   declareContextWindow?: boolean;
+  disableProactiveCompaction?: boolean;
   /** The model's declared output limit, a provider fact the trigger reserves for the reply. */
   modelMaxOutputTokens?: number;
   /**
@@ -513,9 +514,11 @@ function buildFixture(options: MidTurnFixtureOptions = {}): MidTurnFixture {
             : {}),
         },
       ],
-      ...(options.withoutContextWindow || options.declareContextWindow === false
-        ? {}
-        : { modelOverrides: { 'mock-model-id': { compactionThreshold: contextWindow } } }),
+      ...(options.disableProactiveCompaction
+        ? { modelOverrides: { 'mock-model-id': { compactionThreshold: 0 } } }
+        : options.withoutContextWindow || options.declareContextWindow === false
+          ? {}
+          : { modelOverrides: { 'mock-model-id': { compactionThreshold: contextWindow } } }),
     },
     apiKey: 'sk-test',
     modelId: 'mock-model-id',
@@ -1348,12 +1351,12 @@ function defineMidTurnSuite(consumer: ConsumerMode): void {
     assert.equal(fitting.summarizerCalls, 0);
   });
 
-  test('reports an accepted request past the window the model reports when nothing is declared', async () => {
+  test('reports an accepted request past the model window when proactive compaction is off', async () => {
     // The kimi k3-256k shape: the provider accepts past its own reported
     // window without rejecting or truncating, so no other signal fires.
     const fixture = buildFixture({
       contextWindow: 100,
-      declareContextWindow: false,
+      disableProactiveCompaction: true,
       finalAtSecondCall: true,
       firstStepUsage: { input: 150, output: 40 },
     });
@@ -1364,7 +1367,7 @@ function defineMidTurnSuite(consumer: ConsumerMode): void {
         (message as { kind?: string }).kind === 'context_reported_window_exceeded',
     );
     assert.deepEqual(note?.data, { usedTokens: 190, reportedContextWindow: 100 });
-    // A hint is still not a declaration: nothing folded on its own.
+    // The explicit opt-out does not arm a proactive fold.
     assert.equal(fixture.summarizerCalls, 0);
   });
 
@@ -1374,7 +1377,7 @@ function defineMidTurnSuite(consumer: ConsumerMode): void {
     // is already over the line carries that across sessions.
     const fixture = buildFixture({
       contextWindow: 100,
-      declareContextWindow: false,
+      disableProactiveCompaction: true,
       finalAtSecondCall: true,
       firstStepUsage: { input: 150, output: 40 },
       extraPriorEvents: [priorUsageEvent({ inputTokens: 300, outputTokens: 20 })],
@@ -1714,14 +1717,19 @@ describe('mid-turn capacity default-on safety guards (issue #882 PR 3)', () => {
     assert.equal(complete?.type === 'complete' ? complete.stopReason : undefined, 'end_turn');
   });
 
-  test('treats a /models context window as metadata unless the user declares it', async () => {
+  test('derives proactive compaction and overrun notes from reported capacity by default', async () => {
     const reported = buildFixture({
       useRuntimeDefaultPolicy: true,
       contextWindow: 100,
       declareContextWindow: false,
     });
     await runFixtureTurn(reported);
-    assert.equal(reported.summarizerCalls, 0);
+    assert.ok(reported.summarizerCalls > 0);
+    const overrun = reported.messages.find(
+      (message): message is { kind: string; data?: unknown } =>
+        (message as { kind?: string }).kind === 'context_window_overrun',
+    );
+    assert.deepEqual(overrun?.data, { usedTokens: 120, declaredContextWindow: 65 });
 
     const declared = buildFixture({
       useRuntimeDefaultPolicy: true,

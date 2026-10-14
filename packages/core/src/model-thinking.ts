@@ -270,7 +270,7 @@ export function modelOverride(
   return normalizeModelOverride(connection.modelOverrides?.[modelId]);
 }
 
-/** The user's proactive compaction target; model capacity never supplies a default. */
+/** The user's raw proactive compaction override; runtime owns default resolution. */
 export function declaredContextWindow(
   connection: ConnectionThinkingContext,
   modelId: string,

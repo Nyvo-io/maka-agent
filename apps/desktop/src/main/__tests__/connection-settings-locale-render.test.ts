@@ -485,6 +485,50 @@ test('model rows retain named parameter actions without mounting a tooltip layer
   }
 });
 
+test('saving a percentage uses the final model window rather than the typing-time window', async () => {
+  const harness = installRenderer();
+  const base = relayConnection();
+  const connection = {
+    ...base,
+    catalogEntries: [{ ...base.catalogEntries[0]!, contextWindow: 100_000, defaultContextWindow: 100_000 }],
+  };
+  const writes: Parameters<ConnectionsBridge['update']>[1][] = [];
+  await harness.render('zh-CN', createElement(components.RuntimeHostSettingsTarget, {
+    host: { profileId: 'local', hostId: 'host-local' },
+    children: createElement(components.ConnectionDetail, {
+      bridge: connectionDetailBridge({
+        hasSecret: async () => true,
+        update: async (_identity, patch) => { writes.push(patch); return connection; },
+      }),
+      connection, isDefault: true,
+      onChanged: async () => {}, onDeleted: async () => {},
+    }),
+  }));
+  const configure = harness.document.querySelector<HTMLButtonElement>('span[title="配置参数"] > button');
+  assert.ok(configure);
+  await act(async () => configure.click());
+  async function type(placeholder: string, value: string) {
+    const input = harness.document.querySelector<HTMLInputElement>(`dialog[open] input[placeholder="${placeholder}"]`);
+    assert.ok(input, placeholder);
+    await act(async () => {
+      input.value = value;
+      const key = Object.keys(input).find(key => key.startsWith('__reactProps$'));
+      assert.ok(key);
+      const props = (input as unknown as Record<string, unknown>)[key] as {
+        onChange(event: { target: HTMLInputElement; defaultPrevented: boolean }): void;
+      };
+      props.onChange({ target: input, defaultPrevented: false });
+    });
+  }
+  await type('65% / 650K / off', '65%');
+  await type('100000', '200K');
+  const form = harness.document.querySelector('dialog[open] form');
+  assert.ok(form);
+  await act(async () => { form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0]?.modelOverride?.value?.compactionThreshold, 130_000);
+});
+
 test('credential read failures still render the persistent warning', async () => {
   const harness = installRenderer();
   const credential = deferred<boolean>();

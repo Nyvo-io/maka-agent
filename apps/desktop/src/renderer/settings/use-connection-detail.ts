@@ -433,7 +433,7 @@ export function useConnectionDetail(props: ConnectionDetailProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connection.slug, connection.name]);
 
-  async function saveModelParameters(): Promise<boolean> {
+  async function saveModelParameters(patch: Partial<ModelOverride> = {}): Promise<boolean> {
     if (!activeDraft) return false;
     const releaseSave = connectionDetailActionGuard.beginExclusive('save-model-parameters');
     if (!releaseSave) return false;
@@ -442,7 +442,7 @@ export function useConnectionDetail(props: ConnectionDetailProps) {
     let saved = false;
     try {
       await props.bridge.update(connectionIdentity, {
-        modelOverride: { modelId: activeDraft.modelId, expected: activeDraft.expected, value: activeDraft.value },
+        modelOverride: { modelId: activeDraft.modelId, expected: activeDraft.expected, value: { ...activeDraft.value, ...patch } },
       });
       saved = true;
       if (!isConnectionDetailCurrent(lifecycle)) return true;
